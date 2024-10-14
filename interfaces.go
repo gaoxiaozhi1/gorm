@@ -31,6 +31,10 @@ type ParamsFilter interface {
 }
 
 // ConnPool db conns pool interface
+// connPool 字段，其含义是连接池，和数据库的交互操作都需要依赖它才得以执行.
+// connPool 根据是否启用了 prepare 预处理模式，存在不同的实现类版本：
+//● 在普通模式下，connPool 的实现类为 database/sql 库下的 *DB 类（详细内容参见前文——Golang sql 标准库源码解析）
+//● 在 prepare 模式下，connPool 实现类型为 gorm 中定义的 PreparedStmtDB 类
 type ConnPool interface {
 	PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
 	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)

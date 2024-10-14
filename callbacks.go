@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm/utils"
 )
 
+// initializeCallbacks 各类 processor 的初始化是通过 initializeCallbacks 方法完成
 func initializeCallbacks(db *DB) *callbacks {
 	return &callbacks{
 		processors: map[string]*processor{
@@ -26,13 +27,28 @@ func initializeCallbacks(db *DB) *callbacks {
 }
 
 // callbacks gorm callbacks manager
+// gorm 回调管理器
+// 后续在请求执行过程中，会根据 crud 的类型，从 callbacks 中获取对应类型的 processor.
 type callbacks struct {
+	// 对应存储了 crud 等各类操作对应的执行器 processor
+	// query -> query processor
+	// create -> create processor
+	// update -> update processor
+	// delete -> delete processor
+	// gorm 框架执行 crud 操作逻辑时使用到的执行器 processor
+	// 针对 crud 操作的处理函数会以 list 的形式聚合在对应类型 processor 的 fns 字段当中.
 	processors map[string]*processor
 }
 
+// processor gorm 框架执行 crud 操作逻辑时使用到的执行器 processor
 type processor struct {
-	db        *DB
-	Clauses   []string
+	// 从属的 DB 实例
+	db *DB
+	// 根据 crud 类型确定的 SQL 格式模板，后续用于拼接生成 sql
+	// 拼接 sql 时的关键字顺序. 比如 query 类，固定为 SELECT,FROM,WHERE,GROUP BY, ORDER BY, LIMIT, FOR
+	Clauses []string
+	// 对应于 crud 类型的执行函数链
+	// 针对 crud 操作的处理函数会以 list 的形式聚合在对应类型 processor 的 fns 字段当中.
 	fns       []func(*DB)
 	callbacks []*callback
 }
@@ -52,6 +68,7 @@ func (cs *callbacks) Create() *processor {
 	return cs.processors["create"]
 }
 
+// Query 一笔查询操作，会通过 callbacks.Query() 方法获取对应的 processor
 func (cs *callbacks) Query() *processor {
 	return cs.processors["query"]
 }
@@ -72,6 +89,7 @@ func (cs *callbacks) Raw() *processor {
 	return cs.processors["raw"]
 }
 
+// Execute 通用的 processor 执行函数，其中对应于 crud 的核心操作都被封装在 processor 对应的 fns list 当中了
 func (p *processor) Execute(db *DB) *DB {
 	// call scopes
 	for len(db.Statement.scopes) > 0 {
@@ -85,6 +103,7 @@ func (p *processor) Execute(db *DB) *DB {
 	)
 
 	if len(stmt.BuildClauses) == 0 {
+		// 根据 crud 类型，对 buildClauses 进行复制，用于后续的 sql 拼接
 		stmt.BuildClauses = p.Clauses
 		resetBuildClauses = true
 	}

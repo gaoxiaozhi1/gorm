@@ -119,6 +119,7 @@ func Parse(dest interface{}, cacheStore *sync.Map, namer Namer) (*Schema, error)
 }
 
 // ParseWithSpecialTableName get data type from dialector with extra schema table
+// 使用额外的模式表从dialector获取数据类型
 func ParseWithSpecialTableName(dest interface{}, cacheStore *sync.Map, namer Namer, specialTableName string) (*Schema, error) {
 	if dest == nil {
 		return nil, fmt.Errorf("%w: %+v", ErrUnsupportedDataType, dest)
@@ -164,6 +165,7 @@ func ParseWithSpecialTableName(dest interface{}, cacheStore *sync.Map, namer Nam
 
 	modelValue := reflect.New(modelType)
 	tableName := namer.TableName(modelType.Name())
+	// 将 po 模型断言成 tabler interface，然后调用 TableName 方法获取表名
 	if tabler, ok := modelValue.Interface().(Tabler); ok {
 		tableName = tabler.TableName()
 	}
@@ -176,11 +178,11 @@ func ParseWithSpecialTableName(dest interface{}, cacheStore *sync.Map, namer Nam
 	if specialTableName != "" && specialTableName != tableName {
 		tableName = specialTableName
 	}
-
+	// 将表名信息添加到 schema 当中
 	schema := &Schema{
 		Name:             modelType.Name(),
 		ModelType:        modelType,
-		Table:            tableName,
+		Table:            tableName, // 将表名信息添加到 schema 当中
 		FieldsByName:     map[string]*Field{},
 		FieldsByBindName: map[string]*Field{},
 		FieldsByDBName:   map[string]*Field{},

@@ -61,6 +61,7 @@ var tableRegexp = regexp.MustCompile(`(?i)(?:.+? AS (\w+)\s*(?:$|,)|^\w+\s+(\w+)
 //
 //	// Get a user
 //	db.Table("users").Take(&result)
+// 通过链式调用 DB.Table 方法，显式声明本次操作所针对的数据表，这种方式的优先级是最高的
 func (db *DB) Table(name string, args ...interface{}) (tx *DB) {
 	tx = db.getInstance()
 	if strings.Contains(name, " ") || strings.Contains(name, "`") || len(args) > 0 {
@@ -75,9 +76,9 @@ func (db *DB) Table(name string, args ...interface{}) (tx *DB) {
 	} else if tables := strings.Split(name, "."); len(tables) == 2 {
 		tx.Statement.TableExpr = &clause.Expr{SQL: tx.Statement.Quote(name)}
 		tx.Statement.Table = tables[1]
-	} else if name != "" {
+	} else if name != "" { // 明确操作的是哪张数据表.
 		tx.Statement.TableExpr = &clause.Expr{SQL: tx.Statement.Quote(name)}
-		tx.Statement.Table = name
+		tx.Statement.Table = name // 参数赋值
 	} else {
 		tx.Statement.TableExpr = nil
 		tx.Statement.Table = ""
@@ -91,6 +92,7 @@ func (db *DB) Table(name string, args ...interface{}) (tx *DB) {
 //	db.Distinct("name").Find(&results)
 //	// Select distinct name/age pairs from users
 //	db.Distinct("name", "age").Find(&results)
+// 指定要查询的不同字段
 func (db *DB) Distinct(args ...interface{}) (tx *DB) {
 	tx = db.getInstance()
 	tx.Statement.Distinct = true

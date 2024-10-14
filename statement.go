@@ -19,34 +19,41 @@ import (
 )
 
 // Statement statement
+// gorm.DB 中一次会话的状态信息，比如请求和响应信息
+// 里面存储了一次会话中包含的状态信息，比如请求中的条件、sql 语句拼接格式、响应参数类型、数据表的名称等等.
 type Statement struct {
-	*DB
-	TableExpr            *clause.Expr
-	Table                string
-	Model                interface{}
-	Unscoped             bool
-	Dest                 interface{}
-	ReflectValue         reflect.Value
-	Clauses              map[string]clause.Clause
-	BuildClauses         []string
-	Distinct             bool
-	Selects              []string          // selected columns
-	Omits                []string          // omit columns
-	ColumnMapping        map[string]string // map columns
-	Joins                []join
-	Preloads             map[string][]interface{}
-	Settings             sync.Map
-	ConnPool             ConnPool
-	Schema               *schema.Schema
-	Context              context.Context
+	*DB           // 数据库实例
+	TableExpr     *clause.Expr
+	Table         string      // 表名
+	Model         interface{} // 操作的 po 模型
+	Unscoped      bool
+	Dest          interface{} // 处理结果反序列化到此处
+	ReflectValue  reflect.Value
+	Clauses       map[string]clause.Clause // 各种条件语句
+	BuildClauses  []string
+	Distinct      bool              // 是否启用 distinct 模式
+	Selects       []string          // selected columns, select 语句
+	Omits         []string          // omit columns,omit 语句
+	ColumnMapping map[string]string // map columns
+	Joins         []join            // join
+	Preloads      map[string][]interface{}
+	Settings      sync.Map
+	// 连接池，通常情况下是 database/sql 库下的 *DB  类型.  在 prepare 模式为 gorm.PreparedStmtDB
+	ConnPool ConnPool
+	// 操作表的概要信息
+	Schema *schema.Schema
+	// 上下文，请求生命周期控制管理
+	Context context.Context
+	// 在未查找到数据记录时，是否抛出 recordNotFound 错误
 	RaiseErrorOnNotFound bool
-	SkipHooks            bool
-	SQL                  strings.Builder
-	Vars                 []interface{}
-	CurDestIndex         int
-	attrs                []interface{}
-	assigns              []interface{}
-	scopes               []func(*DB) *DB
+	SkipHooks            bool // 钩子？
+	// 执行的 sql，调用 state.Build 方法后，会将 sql 各部分文本依次追加到其中
+	SQL          strings.Builder
+	Vars         []interface{} // 存储的变量
+	CurDestIndex int
+	attrs        []interface{}
+	assigns      []interface{}
+	scopes       []func(*DB) *DB
 }
 
 type join struct {
@@ -489,6 +496,8 @@ func (stmt *Statement) Parse(value interface{}) (err error) {
 	return stmt.ParseWithSpecialTableName(value, "")
 }
 
+// ParseWithSpecialTableName 解析特殊的数据表名
+// 在 DB.Table 方法缺省的情况下，gorm 则会尝试通过 po 类的 TableName 方法获取表名.
 func (stmt *Statement) ParseWithSpecialTableName(value interface{}, specialTableName string) (err error) {
 	if stmt.Schema, err = schema.ParseWithSpecialTableName(value, stmt.DB.cacheStore, stmt.DB.NamingStrategy, specialTableName); err == nil && stmt.Table == "" {
 		if tables := strings.Split(stmt.Schema.Table, "."); len(tables) == 2 {

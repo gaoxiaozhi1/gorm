@@ -58,7 +58,7 @@ type Config struct {
 	// ConnPool db conn pool
 	ConnPool ConnPool
 	// Dialector database dialector
-	Dialector
+	Dialector // 连接器 dialector，本身是个抽象的 interface，其实现类关联了具体数据库类型
 	// Plugins registered plugins
 	Plugins map[string]Plugin
 
@@ -93,12 +93,14 @@ type Option interface {
 }
 
 // DB GORM DB definition
+// gorm.DB 是 gorm 定义的数据库类. 所有执行的数据库的操作都将紧密围绕这个类，以链式调用的方式展开.
+// 每当执行过链式调用后，新生成的 DB 对象中就存储了一些当前请求特有的状态信息，我们把这种对象称作“会话”.
 type DB struct {
-	*Config
-	Error        error
-	RowsAffected int64
-	Statement    *Statement
-	clone        int
+	*Config                 // 用户自定义的配置项
+	Error        error      // 一次会话执行过程中遇到的错误
+	RowsAffected int64      // 该请求影响的行数
+	Statement    *Statement // 一次会话的状态信息，比如请求和响应信息
+	clone        int        // 会话被克隆的次数. 倘若 clone = 1，代表是始祖 DB 实例；倘若 clone > 1，代表是从始祖 DB 克隆出来的会话
 }
 
 // Session session config when create session with Session() method
@@ -121,6 +123,7 @@ type Session struct {
 }
 
 // Open initialize db session based on dialector
+// 基于Dialect打开初始化数据库会话
 func Open(dialector Dialector, opts ...Option) (db *DB, err error) {
 	config := &Config{}
 
@@ -175,7 +178,7 @@ func Open(dialector Dialector, opts ...Option) (db *DB, err error) {
 
 	db = &DB{Config: config, clone: 1}
 
-	db.callbacks = initializeCallbacks(db)
+	db.callbacks = initializeCallbacks(db) // 回调函数初始化
 
 	if config.ClauseBuilders == nil {
 		config.ClauseBuilders = map[string]clause.ClauseBuilder{}
@@ -362,6 +365,8 @@ func (db *DB) Callback() *callbacks {
 }
 
 // AddError add error to db
+// 用于在会话执行过程中抛出错误.
+// 一次会话在执行过程中可能会遇到多个错误，因此会通过 error wrapping 的方式，实现错误的拼接
 func (db *DB) AddError(err error) error {
 	if err != nil {
 		if db.Config.TranslateError {
@@ -402,11 +407,13 @@ func (db *DB) DB() (*sql.DB, error) {
 	return nil, ErrInvalidDB
 }
 
+// getInstance 通过 DB 中的 clone 字段来判断当前是首次从始祖 DB 中执行克隆操作
+// 还是在一个会话的基础上克隆出一个新的会话实例
 func (db *DB) getInstance() *DB {
 	if db.clone > 0 {
 		tx := &DB{Config: db.Config, Error: db.Error}
-
-		if db.clone == 1 {
+		// 倘若是首次对 db 进行 clone，则需要构造出一个新的 statement 实例
+		if db.clone == 1 { // 首次从始祖 DB 中执行克隆操作
 			// clone with new statement
 			tx.Statement = &Statement{
 				DB:        tx,
@@ -414,12 +421,13 @@ func (db *DB) getInstance() *DB {
 				Context:   db.Statement.Context,
 				Clauses:   map[string]clause.Clause{},
 				Vars:      make([]interface{}, 0, 8),
-				SkipHooks: db.Statement.SkipHooks,
+				SkipHooks: db.Statement.SkipHooks, // 钩子
 			}
 			if db.Config.PropagateUnscoped {
 				tx.Statement.Unscoped = db.Statement.Unscoped
 			}
-		} else {
+		} else { // 在一个会话的基础上克隆出一个新的会话实例
+			// 倘若已经 db clone 过了，则还需要 clone 原先的 statement
 			// with clone statement
 			tx.Statement = db.Statement.clone()
 			tx.Statement.DB = tx
