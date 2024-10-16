@@ -186,9 +186,14 @@ func (db *PreparedStmtDB) BeginTx(ctx context.Context, opt *sql.TxOptions) (Conn
 	return nil, ErrInvalidTransaction
 }
 
+// ExecContext 执行操作
+// 在 prepare 模式下，执行操作通过 PreparedStmtDB.ExecContext(...) 方法实现
 func (db *PreparedStmtDB) ExecContext(ctx context.Context, query string, args ...interface{}) (result sql.Result, err error) {
+	// 通过 PreparedStmtDB.prepare(...) 方法尝试复用 stmt
 	stmt, err := db.prepare(ctx, db.ConnPool, false, query)
 	if err == nil {
+		// 调用 stmt.ExecContext(...) 执行查询操作.
+		// 此处 stm.ExecContext(...) 方法本质上会使用 database/sql 中的 sql.Stmt 完成任务.
 		result, err = stmt.ExecContext(ctx, args...)
 		if errors.Is(err, driver.ErrBadConn) {
 			db.Mux.Lock()
@@ -200,9 +205,14 @@ func (db *PreparedStmtDB) ExecContext(ctx context.Context, query string, args ..
 	return result, err
 }
 
+// QueryContext 查询操作
+// 在 prepare 模式下，查询操作通过 PreparedStmtDB.QueryContext(...) 方法实现
 func (db *PreparedStmtDB) QueryContext(ctx context.Context, query string, args ...interface{}) (rows *sql.Rows, err error) {
+	// 尝试复用stmt
 	stmt, err := db.prepare(ctx, db.ConnPool, false, query)
 	if err == nil {
+		// stmt.QueryContext(...) 执行查询操作.
+		// 此处 stm.QueryContext(...) 方法本质上会使用 database/sql 中的 sql.Stmt 完成任务
 		rows, err = stmt.QueryContext(ctx, args...)
 		if errors.Is(err, driver.ErrBadConn) {
 			db.Mux.Lock()
