@@ -2,8 +2,11 @@ package clause
 
 // Interface clause interface
 type Interface interface {
+	// Name clause 名称
 	Name() string
+	// Build 生成对应的 sql 部分
 	Build(Builder)
+	// MergeClause 和同类 clause 合并
 	MergeClause(*Clause)
 }
 
@@ -16,6 +19,8 @@ type Writer interface {
 }
 
 // Builder builder interface
+// 实现statement 一次会话的状态信息，比如请求和响应信息
+// 里面存储了一次会话中包含的状态信息，比如请求中的条件、sql 语句拼接格式、响应参数类型、数据表的名称等等.
 type Builder interface {
 	Writer
 	WriteQuoted(field interface{})
@@ -23,7 +28,7 @@ type Builder interface {
 	AddError(error) error
 }
 
-// Clause
+// Clause 条件
 type Clause struct {
 	Name                string // WHERE
 	BeforeExpression    Expression
@@ -34,6 +39,7 @@ type Clause struct {
 }
 
 // Build build clause
+// 通过调用 clause.Build 方法，将 sql 本文组装到 statement(这里的builder) 的 SQL 字段中.
 func (c Clause) Build(builder Builder) {
 	if c.Builder != nil {
 		c.Builder(c, builder)

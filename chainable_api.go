@@ -342,8 +342,10 @@ func (db *DB) Order(value interface{}) (tx *DB) {
 //	db.Limit(3).Find(&users)
 //	// retrieve 3 users into users1, and all users into users2
 //	db.Limit(3).Find(&users1).Limit(-1).Find(&users2)
+// 查询限制条件
 func (db *DB) Limit(limit int) (tx *DB) {
-	tx = db.getInstance()
+	tx = db.getInstance() // 调用 db.getInstance() 方法，克隆出一份 DB 会话实例
+	// 调用 statement.AddClause 方法，将 limit 条件追加到 statement 的 Clauses map 中
 	tx.Statement.AddClause(clause.Limit{Limit: &limit})
 	return
 }

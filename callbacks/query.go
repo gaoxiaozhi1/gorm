@@ -11,11 +11,13 @@ import (
 	"gorm.io/gorm/utils"
 )
 
+// Query 在 query 类型 processor（执行器） 的 fns 函数链中，最主要的函数是 Query
 func Query(db *gorm.DB) {
 	if db.Error == nil {
-		BuildQuerySQL(db)
+		BuildQuerySQL(db) // 根据传入的 clauses 组装生成 sql
 
 		if !db.DryRun && db.Error == nil {
+			// 完成查询类 sql 的执行，返回查到的行数据 rows（非 prepare 模式下，此处会对接 database/sql 库，走到 sql.DB.QueryContext(...) 方法中）
 			rows, err := db.Statement.ConnPool.QueryContext(db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...)
 			if err != nil {
 				db.AddError(err)
@@ -24,15 +26,17 @@ func Query(db *gorm.DB) {
 			defer func() {
 				db.AddError(rows.Close())
 			}()
+			// 将结果数据反序列化到 statement 的 dest 当中
 			gorm.Scan(rows, db, 0)
 		}
 	}
 }
 
+// BuildQuerySQL 根据传入的 clauses 组装生成 sql
 func BuildQuerySQL(db *gorm.DB) {
 	if db.Statement.Schema != nil {
 		for _, c := range db.Statement.Schema.QueryClauses {
-			db.Statement.AddClause(c)
+			db.Statement.AddClause(c) // 根据传入的 clauses 组装生成 sql
 		}
 	}
 

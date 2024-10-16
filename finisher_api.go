@@ -15,13 +15,17 @@ import (
 )
 
 // Create inserts value, returning the inserted data's primary key in value's id
+// 创建数据记录操作主要通过调用 gorm.DB 的 Create 方法完成
 func (db *DB) Create(value interface{}) (tx *DB) {
 	if db.CreateBatchSize > 0 {
 		return db.CreateInBatches(value, db.CreateBatchSize)
 	}
-
+	// 克隆出一个 DB 会话实例
 	tx = db.getInstance()
+	// 设置 statement 中的 dest 为用户传入的 dest
 	tx.Statement.Dest = value
+	// 获取到 create 类型的 processor
+	// 调用 processor 的 Execute 方法，遍历执行 fns 函数链，完成创建操作
 	return tx.callbacks.Create().Execute(tx)
 }
 
@@ -116,17 +120,20 @@ func (db *DB) Save(value interface{}) (tx *DB) {
 }
 
 // First finds the first record ordered by primary key, matching given conditions conds
+// 首先找到按主键顺序排列的第一个记录，匹配给定的条件CONDITIONS
 func (db *DB) First(dest interface{}, conds ...interface{}) (tx *DB) {
+	// 限制条件Limit
 	tx = db.Limit(1).Order(clause.OrderByColumn{
 		Column: clause.Column{Table: clause.CurrentTable, Name: clause.PrimaryKey},
 	})
 	if len(conds) > 0 {
 		if exprs := tx.Statement.BuildCondition(conds[0], conds[1:]...); len(exprs) > 0 {
-			tx.Statement.AddClause(clause.Where{Exprs: exprs})
+			tx.Statement.AddClause(clause.Where{Exprs: exprs}) // 追加条件
 		}
 	}
 	tx.Statement.RaiseErrorOnNotFound = true
-	tx.Statement.Dest = dest
+	tx.Statement.Dest = dest // 设置 statement 中的 dest 为用户传入的 dest，作为反序列化响应结果的对象实例
+	// 获取 query 类型的 processor，调用 Execute 方法执行其中的 fn 函数链，完成 query 操作
 	return tx.callbacks.Query().Execute(tx)
 }
 
@@ -429,14 +436,19 @@ func (db *DB) UpdateColumns(values interface{}) (tx *DB) {
 // Delete deletes value matching given conditions. If value contains primary key it is included in the conditions. If
 // value includes a deleted_at field, then Delete performs a soft delete instead by setting deleted_at with the current
 // time if null.
+
 func (db *DB) Delete(value interface{}, conds ...interface{}) (tx *DB) {
+	// 获取 db 的克隆实例
 	tx = db.getInstance()
 	if len(conds) > 0 {
 		if exprs := tx.Statement.BuildCondition(conds[0], conds[1:]...); len(exprs) > 0 {
+			// 通过 statement.AddClause(...) 方法追加使用方传入的条件 condition
 			tx.Statement.AddClause(clause.Where{Exprs: exprs})
 		}
 	}
+	// 设置 statement dest 为使用方传入的 value
 	tx.Statement.Dest = value
+	// 获取 delete 类型的 processor, 执行 processor.Execute(...) 方法，遍历调用 fns 函数链
 	return tx.callbacks.Delete().Execute(tx)
 }
 
@@ -618,12 +630,15 @@ func (db *DB) Connection(fc func(tx *DB) error) (err error) {
 // Transaction start a transaction as a block, return error will rollback, otherwise to commit. Transaction executes an
 // arbitrary number of commands in fc within a transaction. On success the changes are committed; if an error occurs
 // they are rolled back.
+// 事务, 调用 db.Transaction(...) 方法
+// 传入闭包函数 fc，其中入参 tx 为带有事务会话属性的 db 实例，后续事务内所有执行操作都需要围绕这个 tx 展开
+// 可以使用该 tx 实例完成事务的提交 tx.Commit() 和回滚 tx.Rollback() 操作
 func (db *DB) Transaction(fc func(tx *DB) error, opts ...*sql.TxOptions) (err error) {
 	panicked := true
 
-	if committer, ok := db.Statement.ConnPool.(TxCommitter); ok && committer != nil {
-		// nested transaction
-		if !db.DisableNestedTransaction {
+	if committer, ok := db.Statement.ConnPool.(TxCommitter); ok && committer != nil { //
+		// nested transaction，嵌套事务
+		if !db.DisableNestedTransaction { // 没有禁用嵌套事务
 			spID := new(maphash.Hash).Sum64()
 			err = db.SavePoint(fmt.Sprintf("sp%d", spID)).Error
 			if err != nil {
@@ -638,6 +653,7 @@ func (db *DB) Transaction(fc func(tx *DB) error, opts ...*sql.TxOptions) (err er
 		}
 		err = fc(db.Session(&Session{NewDB: db.clone == 1}))
 	} else {
+		// 调用 db.Begin(...) 方法启动事务，此时会克隆出一个带有事务属性的 DB 会话实例：tx
 		tx := db.Begin(opts...)
 		if tx.Error != nil {
 			return tx.Error
@@ -645,13 +661,15 @@ func (db *DB) Transaction(fc func(tx *DB) error, opts ...*sql.TxOptions) (err er
 
 		defer func() {
 			// Make sure to rollback when panic, Block error or Commit error
+			// 倘若发生错误或者 panic，则进行 rollback 回滚
 			if panicked || err != nil {
 				tx.Rollback()
 			}
 		}()
-
+		// 执行事务内的逻辑
 		if err = fc(tx); err == nil {
-			panicked = false
+			panicked = false // 没有失败
+			// 指定成功会进行 commit 操作
 			return tx.Commit().Error
 		}
 	}
@@ -661,6 +679,8 @@ func (db *DB) Transaction(fc func(tx *DB) error, opts ...*sql.TxOptions) (err er
 }
 
 // Begin begins a transaction with any transaction options opts
+// 对于 DB.Begin() 方法，在默认模式下会使用 database/sql 库下的 sql.DB.BeginTx 方法创建出一个 sql.Tx 对象，
+// 将其赋给当前事务会话 DB 的 statement.ConnPool 字段
 func (db *DB) Begin(opts ...*sql.TxOptions) *DB {
 	var (
 		// clone statement
@@ -674,9 +694,13 @@ func (db *DB) Begin(opts ...*sql.TxOptions) *DB {
 	}
 
 	switch beginner := tx.Statement.ConnPool.(type) {
+	// 标准模式，会走到 sql.DB.BeginTX 方法
 	case TxBeginner:
+		// 创建好的 tx 赋给 statment.ConnPool
 		tx.Statement.ConnPool, err = beginner.BeginTx(tx.Statement.Context, opt)
+	// prepare 模式，会走到 PreparedStmtDB.BeginTx 方法中
 	case ConnPoolBeginner:
+		// 创建好的 tx 赋给 statment.ConnPool
 		tx.Statement.ConnPool, err = beginner.BeginTx(tx.Statement.Context, opt)
 	default:
 		err = ErrInvalidTransaction
@@ -690,7 +714,9 @@ func (db *DB) Begin(opts ...*sql.TxOptions) *DB {
 }
 
 // Commit commits the changes in a transaction
+// 事务的提交
 func (db *DB) Commit() *DB {
+	// 默认情况下，此处的 ConnPool 实现类为 database/sql.Tx
 	if committer, ok := db.Statement.ConnPool.(TxCommitter); ok && committer != nil && !reflect.ValueOf(committer).IsNil() {
 		db.AddError(committer.Commit())
 	} else {
@@ -700,7 +726,9 @@ func (db *DB) Commit() *DB {
 }
 
 // Rollback rollbacks the changes in a transaction
+// 事务回滚
 func (db *DB) Rollback() *DB {
+	// 默认情况下，此处的 ConnPool 实现类为 database/sql.Tx
 	if committer, ok := db.Statement.ConnPool.(TxCommitter); ok && committer != nil {
 		if !reflect.ValueOf(committer).IsNil() {
 			db.AddError(committer.Rollback())

@@ -110,6 +110,7 @@ func DeleteBeforeAssociations(db *gorm.DB) {
 	}
 }
 
+// Delete 在 delete 类型的 processor 的 fns 函数链中，最核心的函数是 Delete
 func Delete(config *Config) func(db *gorm.DB) {
 	supportReturning := utils.Contains(config.DeleteClauses, "RETURNING")
 
@@ -123,12 +124,12 @@ func Delete(config *Config) func(db *gorm.DB) {
 				db.Statement.AddClause(c)
 			}
 		}
-
+		// 生成sql
 		if db.Statement.SQL.Len() == 0 {
 			db.Statement.SQL.Grow(100)
 			db.Statement.AddClauseIfNotExists(clause.Delete{})
 
-			if db.Statement.Schema != nil {
+			if db.Statement.Schema != nil { // 如果表信息不为空，那么拼接查询条件
 				_, queryValues := schema.GetIdentityFieldValuesMap(db.Statement.Context, db.Statement.ReflectValue, db.Statement.Schema.PrimaryFields)
 				column, values := schema.ToQueryValues(db.Statement.Table, db.Statement.Schema.PrimaryFieldDBNames, queryValues)
 
@@ -147,20 +148,22 @@ func Delete(config *Config) func(db *gorm.DB) {
 			}
 
 			db.Statement.AddClauseIfNotExists(clause.From{})
-
+			// 生成 sql
 			db.Statement.Build(db.Statement.BuildClauses...)
 		}
-
+		// 倘若未启用 AllowGlobalUpdate 模式，
+		// 则会校验使用方是否设置了 where 条件，未设置会抛出 gorm.ErrMissingWhereClause 错误
 		checkMissingWhereConditions(db)
 
 		if !db.DryRun && db.Error == nil {
 			ok, mode := hasReturning(db, supportReturning)
 			if !ok {
+				// 调用 connPool.ExecContext(...) 方法，执行删除操作
 				result, err := db.Statement.ConnPool.ExecContext(db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...)
+				// 调用 result.RowsAffected() 方法，获取本次删除操作影响的数据行数
 				if db.AddError(err) == nil {
 					db.RowsAffected, _ = result.RowsAffected()
 				}
-
 				return
 			}
 

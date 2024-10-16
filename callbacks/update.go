@@ -53,6 +53,7 @@ func BeforeUpdate(db *gorm.DB) {
 }
 
 // Update update hook
+// 在 update 类型 processor 的 fns 函数链中，最核心的函数就是 Update
 func Update(config *Config) func(db *gorm.DB) {
 	supportReturning := utils.Contains(config.UpdateClauses, "RETURNING")
 
@@ -70,7 +71,9 @@ func Update(config *Config) func(db *gorm.DB) {
 		if db.Statement.SQL.Len() == 0 {
 			db.Statement.SQL.Grow(180)
 			db.Statement.AddClauseIfNotExists(clause.Update{})
-			if _, ok := db.Statement.Clauses["SET"]; !ok {
+			// 检查在数据库操作语句（由db.Statement表示）的子句集合中是否存在名为 "SET" 的子句
+			if _, ok := db.Statement.Clauses["SET"]; !ok { // 如果不存在
+				// 将数据库操作语句中的某些内容转换为可以用于SET子句的形式
 				if set := ConvertToAssignments(db.Statement); len(set) != 0 {
 					defer delete(db.Statement.Clauses, "SET")
 					db.Statement.AddClause(set)
@@ -78,10 +81,11 @@ func Update(config *Config) func(db *gorm.DB) {
 					return
 				}
 			}
-
+			// 生成 sql
 			db.Statement.Build(db.Statement.BuildClauses...)
 		}
 
+		// 倘若未启用 AllowGlobalUpdate 模式，则会校验使用方是否设置了 where 条件，未设置会抛出 gorm.ErrMissingWhereClause 错误
 		checkMissingWhereConditions(db)
 
 		if !db.DryRun && db.Error == nil {
@@ -94,8 +98,9 @@ func Update(config *Config) func(db *gorm.DB) {
 					db.AddError(rows.Close())
 				}
 			} else {
+				// 调用 connPool.ExecContext(...) 方法，执行 sql
 				result, err := db.Statement.ConnPool.ExecContext(db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...)
-
+				// 获取到本次更新操作影响的行数
 				if db.AddError(err) == nil {
 					db.RowsAffected, _ = result.RowsAffected()
 				}
@@ -128,6 +133,7 @@ func AfterUpdate(db *gorm.DB) {
 }
 
 // ConvertToAssignments convert to update assignments
+// 转换为更新任务
 func ConvertToAssignments(stmt *gorm.Statement) (set clause.Set) {
 	var (
 		selectColumns, restricted = stmt.SelectAndOmitColumns(false, true)
@@ -206,7 +212,7 @@ func ConvertToAssignments(stmt *gorm.Statement) (set clause.Set) {
 
 			if stmt.Schema != nil {
 				if field := stmt.Schema.LookUpField(k); field != nil {
-					if field.DBName != "" {
+					if field.DBName != "" { // 如果数据库名字不为空
 						if v, ok := selectColumns[field.DBName]; (ok && v) || (!ok && !restricted) {
 							set = append(set, clause.Assignment{Column: clause.Column{Name: field.DBName}, Value: kv})
 							assignValue(field, value[k])

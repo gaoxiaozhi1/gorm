@@ -20,7 +20,7 @@ func BeginTransaction(db *gorm.DB) {
 func CommitOrRollbackTransaction(db *gorm.DB) {
 	if !db.Config.SkipDefaultTransaction {
 		if _, ok := db.InstanceGet("gorm:started_transaction"); ok {
-			if db.Error != nil {
+			if db.Error != nil { // 存在错误就回滚
 				db.Rollback()
 			} else {
 				db.Commit()

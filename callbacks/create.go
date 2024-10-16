@@ -34,6 +34,7 @@ func BeforeCreate(db *gorm.DB) {
 }
 
 // Create create hook
+// 在 create 类型 processor 的 fns 函数链中，最主要的执行函数就是 Create
 func Create(config *Config) func(db *gorm.DB) {
 	supportReturning := utils.Contains(config.CreateClauses, "RETURNING")
 
@@ -59,12 +60,12 @@ func Create(config *Config) func(db *gorm.DB) {
 				}
 			}
 		}
-
+		// 生成 sql
 		if db.Statement.SQL.Len() == 0 {
 			db.Statement.SQL.Grow(180)
 			db.Statement.AddClauseIfNotExists(clause.Insert{})
 			db.Statement.AddClause(ConvertToCreateValues(db.Statement))
-
+			// 调用 statement.Build(...) 方法，生成 sql
 			db.Statement.Build(db.Statement.BuildClauses...)
 		}
 
@@ -93,7 +94,7 @@ func Create(config *Config) func(db *gorm.DB) {
 
 			return
 		}
-
+		// 请求 mysql 服务端执行 sql（默认情况下，此处会使用 database/sql 标准库的 db.ExecContext(...) 方法）
 		result, err := db.Statement.ConnPool.ExecContext(
 			db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...,
 		)
@@ -102,6 +103,7 @@ func Create(config *Config) func(db *gorm.DB) {
 			return
 		}
 
+		// 获取到本次创建操作影响的数据行数
 		db.RowsAffected, _ = result.RowsAffected()
 		if db.RowsAffected == 0 {
 			return

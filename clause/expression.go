@@ -18,6 +18,7 @@ type NegationExpressionBuilder interface {
 }
 
 // Expr raw expression
+// 原始表达
 type Expr struct {
 	SQL                string
 	Vars               []interface{}
@@ -76,6 +77,7 @@ func (expr Expr) Build(builder Builder) {
 }
 
 // NamedExpr raw expression for named expr
+// 命名表达式的原始表达式
 type NamedExpr struct {
 	SQL  string
 	Vars []interface{}
@@ -236,6 +238,7 @@ func (in IN) NegationBuild(builder Builder) {
 }
 
 // Eq equal to for where
+// 等于何处
 type Eq struct {
 	Column interface{}
 	Value  interface{}

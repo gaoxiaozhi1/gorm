@@ -89,7 +89,7 @@ func (cs *callbacks) Raw() *processor {
 	return cs.processors["raw"]
 }
 
-// Execute 通用的 processor 执行函数，其中对应于 crud 的核心操作都被封装在 processor 对应的 fns list 当中了
+// Execute 通用的 processor 执行函数，其中对应于 crud 的核心操作都被封装在 processor 对应的 fns list(函数处理链中) 当中了
 func (p *processor) Execute(db *DB) *DB {
 	// call scopes
 	for len(db.Statement.scopes) > 0 {
@@ -113,6 +113,7 @@ func (p *processor) Execute(db *DB) *DB {
 	}
 
 	// assign model values
+	// dest 和 model 相互赋值
 	if stmt.Model == nil {
 		stmt.Model = stmt.Dest
 	} else if stmt.Dest == nil {
@@ -120,6 +121,7 @@ func (p *processor) Execute(db *DB) *DB {
 	}
 
 	// parse model values
+	// 解析 model，获取对应表的 schema 信息(数据库表名信息和操作表的概要信息)
 	if stmt.Model != nil {
 		if err := stmt.Parse(stmt.Model); err != nil && (!errors.Is(err, schema.ErrUnsupportedDataType) || (stmt.Table == "" && stmt.TableExpr == nil && stmt.SQL.Len() == 0)) {
 			if errors.Is(err, schema.ErrUnsupportedDataType) && stmt.Table == "" && stmt.TableExpr == nil {
@@ -131,6 +133,7 @@ func (p *processor) Execute(db *DB) *DB {
 	}
 
 	// assign stmt.ReflectValue
+	// 处理 dest 信息（处理结果反序列化到此），将其添加到 stmt 当中
 	if stmt.Dest != nil {
 		stmt.ReflectValue = reflect.ValueOf(stmt.Dest)
 		for stmt.ReflectValue.Kind() == reflect.Ptr {
@@ -144,7 +147,8 @@ func (p *processor) Execute(db *DB) *DB {
 			db.AddError(ErrInvalidValue)
 		}
 	}
-
+	// 执行一系列的 callback 函数，其中最核心的 create/query/update/delete 操作都被包含在其中了.
+	// 还包括了一系列前、后处理函数，对应于 crud 类型的执行函数链
 	for _, f := range p.fns {
 		f(db)
 	}
@@ -192,6 +196,7 @@ func (p *processor) Match(fc func(*DB) bool) *callback {
 	return &callback{match: fc, processor: p}
 }
 
+// Register 注册某个特定 fn 函数 的入口是 processor.Register 方法
 func (p *processor) Register(name string, fn func(*DB)) error {
 	return (&callback{processor: p}).Register(name, fn)
 }
@@ -204,7 +209,8 @@ func (p *processor) Replace(name string, fn func(*DB)) error {
 	return (&callback{processor: p}).Replace(name, fn)
 }
 
-func (p *processor) compile() (err error) {
+// compile 注册某个特定 fn 函数 的入口是 processor.Register 方法，
+func (p *processor) compile() (err error) { // 编译
 	var callbacks []*callback
 	removedMap := map[string]bool{}
 	for _, callback := range p.callbacks {
@@ -237,9 +243,10 @@ func (c *callback) After(name string) *callback {
 	return c
 }
 
+// Register 注册某个特定 fn 函数的入口是 processor.Register 方法，
 func (c *callback) Register(name string, fn func(*DB)) error {
-	c.name = name
-	c.handler = fn
+	c.name = name  // processor执行操作
+	c.handler = fn // 函数处理链
 	c.processor.callbacks = append(c.processor.callbacks, c)
 	return c.processor.compile()
 }
@@ -271,6 +278,7 @@ func getRIndex(strs []string, str string) int {
 	return -1
 }
 
+// Callbacks 排序
 func sortCallbacks(cs []*callback) (fns []func(*DB), err error) {
 	var (
 		names, sorted []string

@@ -125,6 +125,7 @@ type Session struct {
 // Open initialize db session based on dialector
 // 基于Dialect打开初始化数据库会话
 func Open(dialector Dialector, opts ...Option) (db *DB, err error) {
+	// 完成 gorm.Config 配置的创建和注入
 	config := &Config{}
 
 	sort.Slice(opts, func(i, j int) bool {
@@ -146,13 +147,15 @@ func Open(dialector Dialector, opts ...Option) (db *DB, err error) {
 		}
 	}
 
+	// 完成连接器 dialector 的注入，本篇使用的是 mysql 版本
 	if d, ok := dialector.(interface{ Apply(*Config) error }); ok {
 		if err = d.Apply(config); err != nil {
 			return
 		}
 	}
 
-	if config.NamingStrategy == nil {
+	// 表、列命名策略
+	if config.NamingStrategy == nil { // 默认标识符长度为64
 		config.NamingStrategy = schema.NamingStrategy{IdentifierMaxLength: 64} // Default Identifier length is 64
 	}
 
@@ -178,6 +181,7 @@ func Open(dialector Dialector, opts ...Option) (db *DB, err error) {
 
 	db = &DB{Config: config, clone: 1}
 
+	// 完成 callbacks 中 crud 等几类 processor（执行器） 的创建
 	db.callbacks = initializeCallbacks(db) // 回调函数初始化
 
 	if config.ClauseBuilders == nil {
@@ -185,6 +189,9 @@ func Open(dialector Dialector, opts ...Option) (db *DB, err error) {
 	}
 
 	if config.Dialector != nil {
+		// 完成 connPool 的创建以及各类 processor fns 函数的注册
+		// 在其中会对 crud 各个方法的 callback 方法进行注册
+		// 会对 db.connPool 进行初始化，通常情况下是 database/sql 库下 *sql.DB 的类型
 		err = config.Dialector.Initialize(db)
 
 		if err != nil {
@@ -194,12 +201,15 @@ func Open(dialector Dialector, opts ...Option) (db *DB, err error) {
 		}
 	}
 
+	// 倘若启用了 prepare(预处理) 模式，需要使用 preparedStmtDB 进行 connPool 的平替
 	if config.PrepareStmt {
 		preparedStmt := NewPreparedStmtDB(db.ConnPool)
 		db.cacheStore.Store(preparedStmtDBKey, preparedStmt)
-		db.ConnPool = preparedStmt
+		db.ConnPool = preparedStmt // 使用 preparedStmtDB 进行 connPool 的平替
 	}
 
+	// 构造 statement(会话) 实例
+	// 构造一个 statement 用于存储处理链路中的一些状态信息
 	db.Statement = &Statement{
 		DB:       db,
 		ConnPool: db.ConnPool,
@@ -207,6 +217,8 @@ func Open(dialector Dialector, opts ...Option) (db *DB, err error) {
 		Clauses:  map[string]clause.Clause{},
 	}
 
+	// 根据策略，决定是否通过 ping 请求测试连接
+	// 倘若未禁用 AutomaticPing，
 	if err == nil && !config.DisableAutomaticPing {
 		if pinger, ok := db.ConnPool.(interface{ Ping() error }); ok {
 			err = pinger.Ping()
@@ -216,7 +228,7 @@ func Open(dialector Dialector, opts ...Option) (db *DB, err error) {
 	if err != nil {
 		config.Logger.Error(context.Background(), "failed to initialize database, got error %v", err)
 	}
-
+	// 返回创建好的 db 实例
 	return
 }
 

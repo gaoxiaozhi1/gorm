@@ -107,15 +107,15 @@ func hasReturning(tx *gorm.DB, supportReturning bool) (bool, gorm.ScanMode) {
 }
 
 func checkMissingWhereConditions(db *gorm.DB) {
-	if !db.AllowGlobalUpdate && db.Error == nil {
-		where, withCondition := db.Statement.Clauses["WHERE"]
+	if !db.AllowGlobalUpdate && db.Error == nil { // 倘若未启用 AllowGlobalUpdate 模式，
+		where, withCondition := db.Statement.Clauses["WHERE"] // 校验使用方是否设置了 where 条件
 		if withCondition {
 			if _, withSoftDelete := db.Statement.Clauses["soft_delete_enabled"]; withSoftDelete {
 				whereClause, _ := where.Expression.(clause.Where)
 				withCondition = len(whereClause.Exprs) > 1
 			}
 		}
-		if !withCondition {
+		if !withCondition { // 未设置会抛出 gorm.ErrMissingWhereClause 错误
 			db.AddError(gorm.ErrMissingWhereClause)
 		}
 		return

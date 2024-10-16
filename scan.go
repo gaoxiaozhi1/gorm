@@ -122,6 +122,9 @@ const (
 )
 
 // Scan scan rows into db statement
+// 将查询结果数据反序列化到 dest 当中
+// 其中 rows 通常为 database/sql 下的 *Rows 类型
+// 扫描数据的核心在于调用了 rows.Scan 方法
 func Scan(rows Rows, db *DB, mode ScanMode) {
 	var (
 		columns, _          = rows.Columns()
@@ -139,9 +142,10 @@ func Scan(rows Rows, db *DB, mode ScanMode) {
 			}
 		}
 	}
-
+	// 影响的行数
 	db.RowsAffected = 0
 
+	// 根据 dest 类型进行断言分配
 	switch dest := db.Statement.Dest.(type) {
 	case map[string]interface{}, *map[string]interface{}:
 		if initialized || rows.Next() {
@@ -149,6 +153,7 @@ func Scan(rows Rows, db *DB, mode ScanMode) {
 			prepareValues(values, db, columnTypes, columns)
 
 			db.RowsAffected++
+			// 扫描数据的核心在于，调用 rows
 			db.AddError(rows.Scan(values...))
 
 			mapValue, ok := dest.(map[string]interface{})
@@ -346,14 +351,15 @@ func Scan(rows Rows, db *DB, mode ScanMode) {
 				db.scanIntoStruct(rows, reflectValue, values, fields, joinFields)
 			}
 		default:
+			// 根据 dest 类型进行前处理 ...
 			db.AddError(rows.Scan(dest))
 		}
 	}
-
+	// 倘若 rows 中存在错误，需要抛出
 	if err := rows.Err(); err != nil && err != db.Error {
 		db.AddError(err)
 	}
-
+	// 在 first、last、take 模式下，RaiseErrorOnNotFound 标识为 true，在没有查找到数据时，会抛出 ErrRecordNotFound 错误
 	if db.RowsAffected == 0 && db.Statement.RaiseErrorOnNotFound && db.Error == nil {
 		db.AddError(ErrRecordNotFound)
 	}

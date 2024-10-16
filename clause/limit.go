@@ -1,6 +1,7 @@
 package clause
 
 // Limit limit clause
+// 限制条件
 type Limit struct {
 	Limit  *int
 	Offset int
@@ -21,12 +22,13 @@ func (limit Limit) Build(builder Builder) {
 		if limit.Limit != nil && *limit.Limit >= 0 {
 			builder.WriteByte(' ')
 		}
-		builder.WriteString("OFFSET ")
+		builder.WriteString("OFFSET ") // 偏移量
 		builder.AddVar(builder, limit.Offset)
 	}
 }
 
 // MergeClause merge order by clauses
+// 合并条件
 func (limit Limit) MergeClause(clause *Clause) {
 	clause.Name = ""
 

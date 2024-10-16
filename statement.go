@@ -81,11 +81,13 @@ func (stmt *Statement) WriteByte(c byte) error {
 }
 
 // WriteQuoted write quoted value
+// 将引用值写给writer
 func (stmt *Statement) WriteQuoted(value interface{}) {
 	stmt.QuoteTo(&stmt.SQL, value)
 }
 
 // QuoteTo write quoted value to writer
+// 将引用值写给writer
 func (stmt *Statement) QuoteTo(writer clause.Writer, field interface{}) {
 	write := func(raw bool, str string) {
 		if raw {
@@ -111,7 +113,7 @@ func (stmt *Statement) QuoteTo(writer clause.Writer, field interface{}) {
 			writer.WriteByte(' ')
 			write(v.Raw, v.Alias)
 		}
-	case clause.Column:
+	case clause.Column: //
 		if v.Table != "" {
 			if v.Table == clause.CurrentTable {
 				write(v.Raw, stmt.Table)
@@ -269,6 +271,7 @@ func (stmt *Statement) AddVar(writer clause.Writer, vars ...interface{}) {
 }
 
 // AddClause add clause
+// 将条件clause 添加到 会话statement中
 func (stmt *Statement) AddClause(v clause.Interface) {
 	if optimizer, ok := v.(StatementModifier); ok {
 		optimizer.ModifyStatement(stmt)
@@ -288,7 +291,7 @@ func (stmt *Statement) AddClauseIfNotExists(v clause.Interface) {
 	}
 }
 
-// BuildCondition build condition
+// BuildCondition build condition,构建条件
 func (stmt *Statement) BuildCondition(query interface{}, args ...interface{}) []clause.Expression {
 	if s, ok := query.(string); ok {
 		// if it is a number, then treats it as primary key
@@ -297,21 +300,22 @@ func (stmt *Statement) BuildCondition(query interface{}, args ...interface{}) []
 				return nil
 			}
 
+			// 包含"?"的条件拼接,原始表达式
 			if len(args) == 0 || (len(args) > 0 && strings.Contains(s, "?")) {
 				// looks like a where condition
 				return []clause.Expression{clause.Expr{SQL: s, Vars: args}}
 			}
-
+			// 包含"@"的条件拼接, 命名表达式的原始表达式
 			if len(args) > 0 && strings.Contains(s, "@") {
 				// looks like a named query
 				return []clause.Expression{clause.NamedExpr{SQL: s, Vars: args}}
 			}
-
+			// 包含" "的条件拼接,原始表达式
 			if strings.Contains(strings.TrimSpace(s), " ") {
 				// looks like a where condition
 				return []clause.Expression{clause.Expr{SQL: s, Vars: args}}
 			}
-
+			// 等于条件
 			if len(args) == 1 {
 				return []clause.Expression{clause.Eq{Column: s, Value: args[0]}}
 			}
@@ -319,11 +323,12 @@ func (stmt *Statement) BuildCondition(query interface{}, args ...interface{}) []
 	}
 
 	conds := make([]clause.Expression, 0, 4)
-	args = append([]interface{}{query}, args...)
+	args = append([]interface{}{query}, args...) // 拼接query参数和args参数
 	for idx, arg := range args {
 		if arg == nil {
 			continue
 		}
+		// Valuer是提供Value方法的. 实现Valuer接口的类型能够将自己转换为驱动程序Value。
 		if valuer, ok := arg.(driver.Valuer); ok {
 			arg, _ = valuer.Value()
 		}
@@ -473,9 +478,11 @@ func (stmt *Statement) BuildCondition(query interface{}, args ...interface{}) []
 }
 
 // Build build sql with clauses names
+// 拼接 sql 是通过调用 Statement.Build 方法来实现的
+// 入参对应的是 crud 中某一类 processor(执行器) 的 BuildClauses（条件）.
 func (stmt *Statement) Build(clauses ...string) {
 	var firstClauseWritten bool
-
+	// 依次从 statement(会话状态) 中获取对应的 clause（条件）
 	for _, name := range clauses {
 		if c, ok := stmt.Clauses[name]; ok {
 			if firstClauseWritten {
@@ -486,18 +493,20 @@ func (stmt *Statement) Build(clauses ...string) {
 			if b, ok := stmt.DB.ClauseBuilders[name]; ok {
 				b(c, stmt)
 			} else {
+				// 通过调用 clause.Build 方法，将 sql 本文组装到 statement 的 SQL 字段中.
 				c.Build(stmt)
 			}
 		}
 	}
 }
 
+// Parse 解析 model，获取对应表的 schema 信息
 func (stmt *Statement) Parse(value interface{}) (err error) {
 	return stmt.ParseWithSpecialTableName(value, "")
 }
 
 // ParseWithSpecialTableName 解析特殊的数据表名
-// 在 DB.Table 方法缺省的情况下，gorm 则会尝试通过 po 类的 TableName 方法获取表名.
+// 在 DB.Table 方法缺省的情况下，gorm 则会尝试通过 po 类的 TableName 方法获取表名，操作表的概要信息.
 func (stmt *Statement) ParseWithSpecialTableName(value interface{}, specialTableName string) (err error) {
 	if stmt.Schema, err = schema.ParseWithSpecialTableName(value, stmt.DB.cacheStore, stmt.DB.NamingStrategy, specialTableName); err == nil && stmt.Table == "" {
 		if tables := strings.Split(stmt.Schema.Table, "."); len(tables) == 2 {
